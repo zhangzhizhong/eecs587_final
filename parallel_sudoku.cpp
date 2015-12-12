@@ -1,4 +1,4 @@
-// Serial forward checking sudoku solver
+// parallel forward checking sudoku solver
 #include <stdio.h>
 #include <cmath>
 #include <vector>
@@ -78,7 +78,7 @@ void solveSudoku(Node* root){
         if(j < N-1){
           next_node->y = j+1;
           local_stack.push_back(next_node);
-
+          
         } else{
           next_node->y = 0;
           (next_node->x) ++;
@@ -91,6 +91,18 @@ void solveSudoku(Node* root){
   // End while
   }
 
+}
+
+
+void Master(Node* root){
+  vector<Node*> global_queue;
+  Node* start = new Node;
+  *start = *root;
+  global_queue.push_back(start);
+
+  while(1){
+    
+  }
 }
 
 
@@ -139,7 +151,7 @@ int main(int argc, char** argv){
   memset(start.row,false,sizeof(start.row));
   memset(start.f,false,sizeof(start.f));
 
-
+  
   for(int i = 0; i < N;i++){
       for(int j = 0; j < N;j++){
           if(start.board[i][j] == 0)   continue;
@@ -151,8 +163,11 @@ int main(int argc, char** argv){
   }
   start.x = start.y = 0;
 
-  solveSudoku(&start);
-
+  if (rank == 0){
+    Master(&start);
+  } else{
+    solveSudoku();
+  }
   if (rank == 0){
     double endtime   = MPI_Wtime();
     printf("That took %f seconds\n",endtime-starttime);
