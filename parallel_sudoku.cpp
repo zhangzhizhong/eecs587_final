@@ -20,22 +20,56 @@ int board[N][N];
 int x,y;
 };
 
+int mpi_size; 
+
 
 
 void printBoard(Node* start);
 
-void solveSudoku(Node* root){
+void solveSudoku(){
   vector<Node*> local_stack;
-  Node* start = new Node;
-  *start = *root;
-  local_stack.push_back(start);
+  Node* start;
+  bool idle_flag = false;
+
   int i,j;
+  int probe_flag;
+  MPI_Status status;
+  char *buffer = new char[sizeof(Node)];
 
   while(1){
 
     if (local_stack.empty()){
-        break;
+
+      if (!idle_flag){
+        idle_flag = true;
+        // Tag 1: pull job
+        int pull_flag = 1;
+        MPI_Send (&pull_flag, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
+        continue;
+      }
+
+      probe_flag = 0;
+      MPI_Iprobe (0, MPI_ANY_TAG, MPI_COMM_WORLD, &probe_flag, &status);
+      if (probe_flag){
+        // Tag 1: pull job
+        if (status.MPI_TAG = 1) {
+          MPI_Recv (buffer, sizeof(Node), MPI_CHAR, 0, 1, MPI_COMM_WORLD, &status);
+          start = new Node;
+          *start = *(static_cast<Node *>(static_cast<void*>(buffer)));
+          local_stack.push_back(start);
+          idle_flag = false;
+        }
+
+        // Tag 3: teminate
+        if (status.MPI_TAG = 3) {
+          break;
+        }
+      }
+
+      continue;
     }
+
+
     start = local_stack.back();
     local_stack.pop_back();
 
@@ -47,7 +81,9 @@ void solveSudoku(Node* root){
     // Terminate with an answer
     if(i >= N){
       printBoard(start);
-      return ;
+      int terminate_flag = 1;
+      MPI_Send (&terminate_flag, 1, MPI_INT, 0, 3, MPI_COMM_WORLD);
+      break;
     }
 
     // Find next empty cell
@@ -90,19 +126,68 @@ void solveSudoku(Node* root){
 
   // End while
   }
-
+  delete buffer;
 }
 
-
+/* 
+  Tag 1: pull job
+  Tag 2: push job
+  Tag 3: teminate
+*/
 void Master(Node* root){
-  vector<Node*> global_queue;
+  struct compare {
+    bool operator () (Node* left_node, Node* right_node) {
+      return left_node->x * N + left_node->y < right_node->x * N + right_node->y;
+    }
+  }; 
+  priority_queue<Node*, vector<Node*>, compare> global_queue;
   Node* start = new Node;
   *start = *root;
-  global_queue.push_back(start);
+  global_queue.push(start);
+  int probe_flag;
+  MPI_Status status;
+  char *buffer;
 
   while(1){
-    
-  }
+    for (int pid = 1; pid < mpi_size; pid++){
+      probe_flag = 0;
+      MPI_Iprobe (pid, MPI_ANY_TAG, MPI_COMM_WORLD, &probe_flag, &status);
+
+      // Processing message
+      if (probe_flag){
+        // Tag 1: pull job
+        if (status.MPI_TAG = 1) {
+          int pull_flag = 0;
+          MPI_Recv (&pull_flag, 1, MPI_INT, pid, 1, MPI_COMM_WORLD, &status);
+          if (!global_queue.empty()){
+            start = global_queue.top();
+            global_queue.pop();
+            buffer = static_cast<char*>(static_cast<void*>(start));
+            MPI_Send (&buffer, sizeof(Node), MPI_CHAR, pid, 1, MPI_COMM_WORLD);
+          }
+        }
+
+        // Tag 2: push job
+        if (status.MPI_TAG = 2) {
+          int stack_size = 0;
+          MPI_Recv (&stack_size, 1, MPI_INT, pid, 2, MPI_COMM_WORLD, &status);
+
+        }
+
+        // Tag 3: teminate
+        if (status.MPI_TAG = 3) {
+          int ter_flag = 0;
+          MPI_Recv (&ter_flag, 1, MPI_INT, pid, 3, MPI_COMM_WORLD, &status);
+          for (int notify_id = 1; notify_id < mpi_size; notify_id++){
+            int terminate_flag = 0;
+            MPI_Send (&terminate_flag, 1, MPI_INT, notify_id, 3, MPI_COMM_WORLD);
+            break;
+          }
+        }
+      } // End processing MPI_Iprobe
+    }
+  } // End while
+
 }
 
 
@@ -115,6 +200,7 @@ int main(int argc, char** argv){
   MPI_Init(&argc, &argv);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
+  mpi_size = size;
   starttime = MPI_Wtime();
   cout << "hello world(" << rank << ", " << size << ")" << endl;
 
