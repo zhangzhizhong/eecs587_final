@@ -1,0 +1,16 @@
+#!/bin/sh
+#PBS -S /bin/sh
+#PBS -N sudoku_M_2
+#PBS -A eecs587f15_flux
+#PBS -l qos=flux
+#PBS -l procs=1,walltime=0:02:00
+#PBS -l pmem=300mb
+#PBS -q flux
+#PBS -m abe
+#PBS -j oe
+#PBS -V
+echo "I ran on:"
+cat $PBS_NODEFILE
+# Let PBS handle your output
+cd final_proj/ 
+mpirun -np 2 ./sudoku.bin
