@@ -15,8 +15,8 @@ using namespace std;
 #define N 16
 
 int min(int a, int b){
-  if (a < b) return b;
-  return a;
+  if (a < b) return a;
+  return b;
 }
 
 struct Node{
@@ -46,12 +46,12 @@ void solveSudoku(){
   MPI_Status status;
   char *buffer = new char[sizeof(Node)];
 
-  int push_back_counter = 0;
+  long long push_back_counter = 0;
   int stack_size;
   int num_push_back;
 
 
-double local_cnt = 0;
+long long local_cnt = 0;
 
   while(1){
 
@@ -62,14 +62,21 @@ double local_cnt = 0;
         // Tag 1: pull job
         int pull_flag = 1;
         MPI_Send(&pull_flag, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
-        cout << "idle worker request(" << rank << ")" << endl;
+        //cout << "idle worker request(" << rank << ") at time:"<< local_cnt << endl;
+	      probe_flag = 0;
+	      MPI_Iprobe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &probe_flag, &status);
+	      if (probe_flag){
+		cout << "*******error detect reply(" << rank << ") flag = "<< status.MPI_TAG << endl;
+		break;	
+	      }
         continue;
       }
 
       probe_flag = 0;
       MPI_Iprobe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &probe_flag, &status);
       if (probe_flag){
-        cout << "idle worker detect reply(" << rank << ")" << endl;
+        //cout << "idle worker detect reply(" << rank << ") flag = "<< status.MPI_TAG << "at time:" << local_cnt << endl;
+	if (status.MPI_TAG == 2) { break;}
         // Tag 1: pull job
         if (status.MPI_TAG == 1) {
           start = new Node;
@@ -78,7 +85,7 @@ double local_cnt = 0;
           //*start = *(static_cast<Node *>(static_cast<void*>(buffer)));
           local_stack.push_back(start);
           idle_flag = false;
-          printBoard(start);
+          // printBoard(start);
         }
 
         // Tag 3: teminate
@@ -92,18 +99,35 @@ double local_cnt = 0;
     local_cnt++;
 
     // Push back to master
-    if (++push_back_counter == 5000){
+    if (++push_back_counter == 50000){
       push_back_counter = 0;
       stack_size = local_stack.size();
       MPI_Send (&stack_size, 1, MPI_INT, 0, 2, MPI_COMM_WORLD);
-      MPI_Recv (&num_push_back, 1, MPI_INT, 0, 2, MPI_COMM_WORLD, &status);
-      char* nodes_buf = new char[num_push_back * sizeof(Node)];
-      for (int k = 0; k < num_push_back; k++){
-        memcpy(nodes_buf + k * sizeof(Node), local_stack[k], sizeof(Node));
+
+      probe_flag = 0;
+      while (1){
+        MPI_Iprobe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &probe_flag, &status);
+      	if (probe_flag){
+	  break;
+	}
       }
-      local_stack.erase(local_stack.begin(), local_stack.begin() + num_push_back);
-      MPI_Send (nodes_buf, num_push_back * sizeof(Node), MPI_CHAR, 0, 2, MPI_COMM_WORLD);
-      delete nodes_buf;
+      if (status.MPI_TAG == 3){
+        cout << "******answer found" << endl;
+	break;	
+      }
+      MPI_Recv (&num_push_back, 1, MPI_INT, 0, 2, MPI_COMM_WORLD, &status);
+      if (num_push_back > 0){
+	      char* nodes_buf = new char[num_push_back * sizeof(Node)];
+	      for (int k = 0; k < num_push_back; k++){
+		memcpy(nodes_buf + k * sizeof(Node), local_stack[k], sizeof(Node));
+	      }
+	      local_stack.erase(local_stack.begin(), local_stack.begin() + num_push_back);
+	      MPI_Send (nodes_buf, num_push_back * sizeof(Node), MPI_CHAR, 0, 2, MPI_COMM_WORLD);
+	      delete nodes_buf;
+	      // check buffer
+	      probe_flag = 0;
+	      MPI_Iprobe(0, MPI_ANY_TAG, MPI_COMM_WORLD, &probe_flag, &status);
+      }
     }
 
 
@@ -191,22 +215,23 @@ void Master(Node* root){
     for (int pid = 1; pid < mpi_size; pid++){
       probe_flag = 0;
       MPI_Iprobe(pid, MPI_ANY_TAG, MPI_COMM_WORLD, &probe_flag, &status);
-      // cout<<"Iprobe cpu: ("<<pid<<") of tag: "<<probe_flag<<endl;
+
       // Processing message
       if (probe_flag){
-        
+        // cout<<"Iprobe cpu: ("<<pid<<") of tag: "<<status.MPI_TAG<<endl;
         // Tag 1: pull job
         if (status.MPI_TAG == 1) {
-          int pull_flag = 0;
-          MPI_Recv (&pull_flag, 1, MPI_INT, pid, 1, MPI_COMM_WORLD, &status);
-          cout<<"find pull request from: ("<<pid<<") of tag: "<<pull_flag<<endl;
           if (!global_queue.empty()){
+	    int pull_flag = 0;
+            MPI_Recv (&pull_flag, 1, MPI_INT, pid, 1, MPI_COMM_WORLD, &status);
+    
             start = global_queue.top();
             global_queue.pop();
             buffer = static_cast<char*>(static_cast<void*>(start));
             MPI_Send (buffer, sizeof(Node), MPI_CHAR, pid, 1, MPI_COMM_WORLD);
             delete start;
           }
+	  continue;
         }
 
         // Tag 2: push job
@@ -215,7 +240,7 @@ void Master(Node* root){
           MPI_Recv (&stack_size, 1, MPI_INT, pid, 2, MPI_COMM_WORLD, &status);
 
           // Check size of global queue
-          if (global_queue.size() > 2*mpi_size) {
+          if (global_queue.size() >= 2*mpi_size) {
             num_push_back = 0;
             MPI_Send (&num_push_back, 1, MPI_INT, pid, 2, MPI_COMM_WORLD);
             continue;
@@ -236,10 +261,6 @@ void Master(Node* root){
             global_queue.push(start);
           }
 
-          // cout<<" push back from(" << pid <<")"<<endl;
-          // printBoard(start);
-          // terminate_flag = 1; break;
-
           delete nodes_buf;
         }
 
@@ -249,6 +270,7 @@ void Master(Node* root){
 
           MPI_Recv (&terminate_flag, 1, MPI_INT, pid, 3, MPI_COMM_WORLD, &status);
           for (int notify_id = 1; notify_id < mpi_size; notify_id++){
+	    if (notify_id == pid) continue;
             MPI_Send (&terminate_flag, 1, MPI_INT, notify_id, 3, MPI_COMM_WORLD);
           }
           cout<<"master exit"<<endl;
