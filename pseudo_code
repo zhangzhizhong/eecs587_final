@@ -1,0 +1,30 @@
+pseudo code:
+while(1){
+    for (pid : Worker){
+      // Processing message
+      if (probe_flag){
+        // Tag 1: pull job
+        if (status.MPI_TAG == 1) {
+          if (!global_queue.empty()){
+        	send one task from global queue to user 
+          }
+        }
+
+        // Tag 2: push job
+        if (status.MPI_TAG == 2) {
+          // Check size of global queue
+          if (global_queue.size() >= mpi_size) {
+            Tell worker no need to push back
+          }
+          Reply number of Nodes wanted
+          Receive Node list
+        }
+
+        // Tag 3: teminate
+        if (status.MPI_TAG == 3) {
+          	broadcast all worker to terminate
+            master exit
+        }
+      } // End processing MPI_Iprobe
+    }
+  } // End while
