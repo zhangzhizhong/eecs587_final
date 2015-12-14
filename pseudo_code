@@ -28,3 +28,61 @@ while(1){
       } // End processing MPI_Iprobe
     }
   } // End while
+    
+    
+while (1){
+    if (local_stack.empty()){
+
+      if (!idle_flag){
+        idle_flag = true;
+        // Tag 1: pull job
+        MPI_Send(&pull_flag, 1, MPI_INT, 0, 1, MPI_COMM_WORLD);
+        continue;
+      }
+
+
+      if (probe_flag){
+
+        // Tag 1: pull job receive
+        if (status.MPI_TAG == 1) {
+          MPI_Recv(start, sizeof(Node), MPI_CHAR, 0, 1, MPI_COMM_WORLD, &status);
+          idle_flag = false;
+        }
+
+        // Tag 3: teminate
+        if (status.MPI_TAG == 3) {
+          exit
+        }
+      }
+      continue;
+    } else{
+        // Push back to master
+        if (++push_back_counter == comm_frequency){
+          // request push back
+          MPI_Send (&stack_size, 1, MPI_INT, 0, 2, MPI_COMM_WORLD);
+    
+          // Probe next message
+          while (! probe ){
+          }
+          
+          // check terminate
+          if (status.MPI_TAG == 3){
+            exit
+          }
+          Push back tasks
+        }  
+        do local search
+    }
+}
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
