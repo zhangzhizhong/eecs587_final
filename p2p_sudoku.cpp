@@ -69,6 +69,7 @@ void solveSudoku(Node* root){
 
 
   long long local_cnt = 0;
+  long long load_balance_cnt = 0;
 
   while(1){
 
@@ -82,7 +83,7 @@ void solveSudoku(Node* root){
           peer_index = 0;
         }
         MPI_Send(&pull_flag, 1, MPI_INT, peers[peer_index], 1, MPI_COMM_WORLD);
-        cout << "idle worker request(" << rank << ") to "<< peers[peer_index] <<" at time "<< local_cnt<< endl;
+        //cout << "idle worker request(" << rank << ") to "<< peers[peer_index] <<" at time "<< local_cnt<< endl;
         continue;
       }
 
@@ -111,15 +112,15 @@ void solveSudoku(Node* root){
           // Reset idle_flag, try other peer
           idle_flag = false;
           if (!pull_start){
-            cout << "idle worker detect null reply(" << rank << ")"<<endl;
+            //cout << "idle worker detect null reply(" << rank << ")"<<endl;
             continue;
           }
-          cout << "idle worker detect reply(" << rank << ") from" << status.MPI_SOURCE <<" flag = "<< status.MPI_TAG << "at time:" << local_cnt << endl;
+          //cout << "idle worker detect reply(" << rank << ") from" << status.MPI_SOURCE <<" flag = "<< status.MPI_TAG << "at time:" << local_cnt << endl;
           // Receive node
           start = new Node;
           MPI_Recv(start, sizeof(Node), MPI_CHAR, peers[peer_index], 2, MPI_COMM_WORLD, &status);
           local_stack.push_back(start);
-          printBoard(start);
+          //printBoard(start);
         }
 
         // Tag 3: teminate
@@ -143,19 +144,20 @@ void solveSudoku(Node* root){
 
     // Runtime Load balancing
 
-    if (++run_time_counter == 50000){
+    if (++run_time_counter == 300000){
+      load_balance_cnt++;
       run_time_counter = 0;
       int loop_cnt = 0;
       while(1){
         // Too much message
-        if (++loop_cnt == 3*mpi_size){
+        if (++loop_cnt == mpi_size){
           break;
         }
         probe_flag = 0;
         MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &probe_flag, &status);
         if (probe_flag){
           //cout << "idle worker detect reply(" << rank << ") flag = "<< status.MPI_TAG << "at time:" << local_cnt << endl;
-         cout<<"Iprobe cpu: ("<<rank<<") of tag: "<<status.MPI_TAG<<endl;
+         //cout<<"Iprobe cpu: ("<<rank<<") of tag: "<<status.MPI_TAG<<endl;
           // Tag 1: request channel
           if (status.MPI_TAG == 1) {
             // reply peer requst
@@ -257,7 +259,7 @@ void solveSudoku(Node* root){
   // End while
   }
   delete buffer;
-  cout << "worker terminate(" << rank << ") with work:"<< local_cnt << endl;
+  cout << "worker terminate(" << rank << ") with work:"<< local_cnt <<" and comm:"<<load_balance_cnt<< endl;
 }
 
 /* Driver Program to test above functions */
@@ -287,11 +289,11 @@ int main(int argc, char** argv){
   cout<<endl;
 
 
-  // 72 secs
-  int grid[N][N] = {{ 7, 0, 0, 0, 0, 5, 1, 0, 3, 11, 0, 0, 0, 0, 0, 0 },
+  // 65 secs
+  int grid[N][N] = {{ 7, 14, 6, 9, 8, 5, 1, 0, 3, 11, 0, 0, 0, 0, 0, 0 },
                     { 12, 8, 0, 0, 0, 15, 14, 0, 4, 0, 9, 0, 11, 0, 16, 2 },
                     { 0, 15, 10, 2, 13, 0, 0, 0, 0, 7, 0, 5, 8, 0, 3, 0 },
-                    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+                    { 1, 3, 11, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
                     { 0, 0, 1, 0, 0, 2, 0, 0, 15, 0, 0, 0, 5, 0, 0, 11 },
                     { 15, 0, 0, 3, 0, 0, 0, 0, 0, 0, 7, 14, 6, 0, 1, 0 },
                     { 14, 0, 16, 0, 0, 0, 0, 0, 0, 5, 6, 0, 10, 2, 0, 0 },
@@ -299,11 +301,11 @@ int main(int argc, char** argv){
                     { 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 0, 0, 9, 8, 0, 0 },
                     { 0, 6, 4, 0, 0, 10, 0, 0, 7, 0, 14, 0, 0, 0, 11, 0 },
                     { 0, 16, 0, 12, 0, 3, 9, 0, 10, 0, 0, 8, 0, 0, 5, 0 },
-                    { 0, 0, 0, 10, 15, 11, 8, 1, 6, 13, 0, 4, 0, 14, 0, 16 },
-                    { 16, 12, 0, 6, 11, 14, 15, 13, 5, 10, 8, 7, 1, 4, 2, 9 },
-                    { 9, 2, 0, 0, 0, 8, 12, 4, 13, 16, 15, 1, 3, 11, 10, 5 },
-                    { 5, 13, 8, 4, 3, 1, 10, 2, 12, 9, 11, 6, 14, 16, 15, 7 },
-                    { 10, 1, 15, 11, 9, 7, 5, 16, 14, 3, 4, 2, 13, 6, 12, 8 },};
+                    { 0, 0, 0, 10, 15, 11, 8, 1, 6, 13, 0, 4, 0, 0, 0, 16 },
+                    { 16, 12, 0, 6, 11, 14, 15, 13, 5, 10, 0, 7, 1, 0, 2, 9 },
+                    { 9, 2, 0, 0, 0, 8, 12, 4, 13, 16, 15, 1, 3, 11, 10, 0 },
+                    { 5, 13, 8, 4, 3, 1, 10, 2, 12, 9, 11, 6, 14, 0, 15, 7 },
+                    { 10, 1, 15, 11, 9, 7, 5, 16, 14, 3, 4, 0, 13, 6, 0, 8 },};
 
 
 
